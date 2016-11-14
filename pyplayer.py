@@ -1,6 +1,7 @@
 import urllib
 import urlparse
 from BeautifulSoup import BeautifulSoup
+from HTMLParser import HTMLParser
 import pafy
 import pygame
 import random
@@ -11,14 +12,18 @@ import thread
 import time
 
 TEMP_ADDRESS = 'C:/temp/'
+color_format = {
+    'WHITE' : '\33[97m',
+    'GREEN' : '\33[92m',
+    'RED' : '\33[91m',
+    'END' : '\033[0m'
+}
 
 """
 TODO
 
 add command line commands (cd, dir, etc.)
-new playlist
 colored text
-deal with abnormal characters in download
 
 songs to add:
 carolina liar show me what im looking for
@@ -77,6 +82,16 @@ class Playlist():
     def get_songs(self):
         return self.oggpaths
 
+    """ returns song title (default is current song) """
+    def get_song_title(self, index=None):
+        if index == None:
+            if len(self.prevsongs) > 0:
+                index = self.prevsongs[-1]
+            else:
+                return None
+        title_bits = self.oggpaths[index].split('\\')
+        return title_bits[-1][:-4]
+
     """ get state of shuffle """
     def get_shuffle(self):
         return self.shuffle
@@ -88,6 +103,13 @@ class Playlist():
     """ set whether player should shuffle or not """
     def set_shuffle(self, shuffle):
         self.shuffle = shuffle
+
+    def delete_song(self, index):
+        if index < 0 or index >= len(self.oggpaths):
+            print " ERR: Index out of bounds."
+        else:
+            if raw_input(" Are you sure you want to delete %s?(y, N) " %(self.get_song_title(index))) == 'y':
+                os.remove(self.oggpaths[index])
 
 ##################################################
 
@@ -119,6 +141,7 @@ def search_youtube():
         return None
     return urls[desired]
 
+
 """ returns path of file """
 def download_from_url(url, new_path=None):
     if url != None:
@@ -127,12 +150,12 @@ def download_from_url(url, new_path=None):
         if not new_path.endswith('/'):
             new_path += '/'
 
-        to_dl = pafy.new(url).getbestaudio(preftype="m4a")
-        to_dl.download(TEMP_ADDRESS, quiet=False)
-
         title = get_title_from_url(url)
         aacpath = TEMP_ADDRESS + title + '.m4a'
         oggpath = new_path + title + '.ogg'
+
+        to_dl = pafy.new(url).getbestaudio(preftype="m4a")
+        to_dl.download(aacpath, quiet=False)
 
         subprocess.call(["ffmpeg", "-i", aacpath, "-acodec", "libvorbis", "-ab",
                       "256k", oggpath], shell=False)
@@ -141,14 +164,17 @@ def download_from_url(url, new_path=None):
         print " ***File successfully downloaded to %s!***" %oggpath
         return oggpath
 
+
 """ returns the title of the paramter youtube video link """
 def get_title_from_url(url):
     html = urllib.urlopen(url).read()
-    bs = BeautifulSoup(html)
+    bs = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES)
     title = str(bs.find('span', {"class" : "watch-title"}))
     title = title[title.find('title=')+7:]
     title = title[:title.find('>')-1]
-    return title
+    title = title.decode("utf-8").encode("ascii", "ignore")
+    return HTMLParser().unescape(title)
+
 
 """ return list consisting of urls to songs
 open desired playlist .txt file from given path and reassign currentPlaylist, print out songs in list
@@ -182,6 +208,9 @@ def open_playlist(path=None):
 def new_playlist(path=None):
     if path == None:
         path = raw_input(" Enter path to new playlist: ")
+    if not os.path.exists(path):
+        os.makedirs(path)
+
 
 """ plays music continuously, switching to the next in the queue when the song
 is finished
@@ -198,14 +227,14 @@ def print_banner():
     print " * PYPLAYER :: PYTHON MEDIA PLAYER *"
     print " ***********************************"
 
-""" handles command line input """
-def main():
+
+if __name__ == '__main__':
     os.system('cls')
-    print_banner()
 
     current_playlist = None
     pygame.mixer.init()
 
+    print_banner()
     while True:
         cmd = raw_input(" >").strip()
 
@@ -231,10 +260,12 @@ def main():
                     if current_playlist == None:
                         raise Exception(" ERR: Playlist not open.")
                     for i in range(len(current_playlist.get_songs())):
-                        path_bits = current_playlist.get_songs()[i].split('\\')
-                        print " [%d] : %s" %(i, path_bits[-1][:-4])
+                        if i == current_playlist.get_current_song_index():
+                            print (" {GREEN}[%d] : %s{END}" %(i, current_playlist.get_song_title(i))).format(**color_format)
+                        else:
+                            print (" {WHITE}[%d] : %s{END}" %(i, current_playlist.get_song_title(i))).format(**color_format)
                 except Exception as inst:
-                    print inst.message
+                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
         elif "current" in cmd:
             if "help" in cmd:
@@ -244,13 +275,25 @@ def main():
                 try:
                     if current_playlist == None:
                         raise Exception(" ERR: Playlist not open.")
-                    title_bits = current_playlist.get_songs()[current_playlist.get_current_song_index()].split('\\')
-                    print " [%d] : %s" %(current_playlist.get_current_song_index(), title_bits[-1][:-4])
+
+                    title = current_playlist.get_song_title()
+
+                    if title is None:
+                        raise Exception( " ERR: No song playling.")
+                    else:
+                        print (" {GREEN}[%d] : %s{END}" %(current_playlist.get_current_song_index(), title)).format(**color_format)
                 except Exception as inst:
-                    print inst.message
+                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
         elif "new" in cmd:
-            pass
+            if "help" in cmd:
+                print " new <path <?>>"
+                print " Creates a new directory specified in path."
+            else:
+                if len(cmd) > 3:
+                    new_playlist(cmd[4:])
+                else:
+                    new_playlist()
 
         elif "play" in cmd:
             if "help" in cmd:
@@ -273,7 +316,7 @@ def main():
                     thread.start_new_thread(run_player, ('Thread-1',
                                                          current_playlist, ))
                 except Exception as inst:
-                    print inst.message
+                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
         elif "shuffle" in cmd:
             if "help" in cmd:
@@ -286,7 +329,7 @@ def main():
                     current_playlist.set_shuffle(not current_playlist.get_shuffle())
                     print " *** Shuffle : %s ***" %current_playlist.get_shuffle()
                 except Exception as inst:
-                    print inst.message
+                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
         elif "skip" in cmd:
             if "help" in cmd:
@@ -299,7 +342,7 @@ def main():
                     #playlist automatically increments index after playing a song
                     current_playlist.skip_song()
                 except Exception as inst:
-                    print inst.message
+                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
         elif "previous" in cmd:
             if "help" in cmd:
@@ -311,7 +354,7 @@ def main():
                         raise Exception(" ERR: Playlist not open.")
                     current_playlist.previous_song()
                 except Exception as inst:
-                    print inst.message
+                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
         elif "restart" in cmd:
             if "help" in cmd:
@@ -323,7 +366,7 @@ def main():
                         raise Exception(" ERR: Playlist not open.")
                     current_playlist.restart_song()
                 except Exception as inst:
-                    print inst.message
+                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
         elif "pause" in cmd:
             if "help" in cmd:
@@ -345,12 +388,12 @@ def main():
                 print " Sets the volume to a desired float value (must be between 0.0 and 1.0 inclusive)."
             else:
                 try:
-                    new_volume = float(cmd[7:])
+                    new_volume = float(cmd[6:])
                     if new_volume < 0 or new_volume > 1:
                         raise Exception(" ERR: Volume out of bounds [0, 1.0].")
-                    pygame.mixer.music.set_volume(new_volume)
+                    pygame.mixer.music.set_volume()
                 except Exception as inst:
-                    print inst.message
+                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
         elif "download" in cmd:
             if "help" in cmd:
@@ -396,7 +439,4 @@ def main():
             print " open <path>, new <path>, play <index>, list, current"
             print " download <url>, shuffle, skip, previous, restart, pause, unpause, volume <new volume [0.0, 1.0]>"
             print " help, clear, version, exit"
-
-if __name__ == "__main__":
-    main()
 
