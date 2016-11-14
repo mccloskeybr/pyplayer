@@ -19,18 +19,6 @@ color_format = {
     'END' : '\033[0m'
 }
 
-"""
-TODO
-
-add command line commands (cd, dir, etc.)
-colored text
-
-songs to add:
-carolina liar show me what im looking for
-nujabes shit
-coldplay
-"""
-
 class Playlist():
     def __init__(self, oggpaths):
         self.oggpaths = oggpaths
