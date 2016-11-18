@@ -31,6 +31,9 @@ class Playlist():
         if index != None:
             self.index = index
 
+        if self.index < 0 or self.index >= len(self.oggpaths):
+            raise Exception(" ERR: Index out of bounds.")
+
         pygame.mixer.music.load(self.oggpaths[self.index])
         pygame.mixer.music.play(1)
 
@@ -60,15 +63,9 @@ class Playlist():
 
     """ get index of the current song """
     def get_current_song_index(self):
+        if len(self.prevsongs) == 0:
+            return -1
         return self.prevsongs[-1]
-
-    """ gets index of queued song in the playlist """
-    def get_index(self):
-        return self.index
-
-    """ get songs in playlist """
-    def get_songs(self):
-        return self.oggpaths
 
     """ returns song title (default is current song) """
     def get_song_title(self, index=None):
@@ -80,32 +77,34 @@ class Playlist():
         title_bits = self.oggpaths[index].split('\\')
         return title_bits[-1][:-4]
 
-    """ get state of shuffle """
-    def get_shuffle(self):
-        return self.shuffle
-
-    """ set index of current song """
-    def set_index(self, index):
-        self.index = index
-
-    """ set whether player should shuffle or not """
-    def set_shuffle(self, shuffle):
-        self.shuffle = shuffle
-
+    """ deletes a song from the playlist """
     def delete_song(self, index):
+        print index
         if index < 0 or index >= len(self.oggpaths):
-            print " ERR: Index out of bounds."
+            raise Exception(" ERR: Index out of bounds.")
         else:
             if raw_input(" Are you sure you want to delete %s?(y, N) " %(self.get_song_title(index))) == 'y':
                 os.remove(self.oggpaths[index])
+                self.oggpaths.remove(index)
+
+    """ searches for a song within the playlist """
+    def search_for_song(self, keyword):
+        i = []
+        for x in range(len(self.oggpaths)):
+            if keyword.lower() in self.get_song_title(x).lower():
+                i.append(x)
+        return i
 
 ##################################################
 
-""" return url to desired song
+"""
+return url to desired song
 searches for a specified song on youtube, user picks desired from list of results
 """
 def search_youtube():
     search = str(raw_input(' What song do you want to search for?: ')).replace(' ', '+')
+    if search == "" or search == "abort":
+        raise Exception(" Process aborted.")
     url = 'http://www.youtube.com/results?search_query=%s' %search
 
     print " Searching..."
@@ -126,7 +125,7 @@ def search_youtube():
 
     desired = int(raw_input(" Index of desired video?(-1 to abort): "))
     if desired == -1:
-        return None
+        raise Exception(" Process aborted.")
     return urls[desired]
 
 
@@ -151,6 +150,8 @@ def download_from_url(url, new_path=None):
         os.remove(aacpath)
         print " ***File successfully downloaded to %s!***" %oggpath
         return oggpath
+    else:
+        raise Exception(" ERR: No URL provided.")
 
 
 """ returns the title of the paramter youtube video link """
@@ -164,7 +165,8 @@ def get_title_from_url(url):
     return HTMLParser().unescape(title)
 
 
-""" return list consisting of urls to songs
+"""
+return list consisting of urls to songs
 open desired playlist .txt file from given path and reassign currentPlaylist, print out songs in list
 """
 def open_playlist(path=None):
@@ -185,12 +187,10 @@ def open_playlist(path=None):
             print " ***Opened playlist successfully!***"
             return paths
         else:
-            print " Error ocurred when opening playlist."
-            return []
+            raise Exception(" ERR: Playlist size is 0.")
 
     except:
-        print "ERR: Directory not found"
-        return None
+        raise Exception(" ERR: Directory not found.")
 
 """ opens a new directory for music to be placed into """
 def new_playlist(path=None):
@@ -198,9 +198,12 @@ def new_playlist(path=None):
         path = raw_input(" Enter path to new playlist: ")
     if not os.path.exists(path):
         os.makedirs(path)
+    else:
+        raise Exception(" ERR: Directory already exists.")
 
 
-""" plays music continuously, switching to the next in the queue when the song
+"""
+plays music continuously, switching to the next in the queue when the song
 is finished
 """
 def run_player(thread_id, playlist):
@@ -215,8 +218,7 @@ def print_banner():
     print " * PYPLAYER :: PYTHON MEDIA PLAYER *"
     print " ***********************************"
 
-
-if __name__ == '__main__':
+def main():
     os.system('cls')
 
     current_playlist = None
@@ -225,206 +227,215 @@ if __name__ == '__main__':
     print_banner()
     while True:
         cmd = raw_input(" >").strip()
-
-        if "open" in cmd:
-            if "help" in cmd:
-                print " open <OPTIONAL path>"
-                print " Opens a playlist at the desired path and saves in order to be played."
-            else:
-                if len(cmd) > 4:
-                    songs = open_playlist(cmd[5:])
+        try:
+            if "open" in cmd:
+                if "help" in cmd:
+                    print " open <OPTIONAL path>"
+                    print " Opens a playlist at the desired path and saves in order to be played."
                 else:
-                    songs = open_playlist()
+                    if len(cmd) > 4:
+                        songs = open_playlist(cmd[5:])
+                    else:
+                        songs = open_playlist()
 
-                if songs != None:
                     current_playlist = Playlist(songs)
 
-        elif "list" in cmd:
-            if "help" in cmd:
-                print " list"
-                print " Lists the songs in the current playlist (must have a playlist loaded to work)."
-            else:
-                try:
+            elif "list" in cmd:
+                if "help" in cmd:
+                    print " list"
+                    print " Lists the songs in the current playlist (must have a playlist loaded to work)."
+                else:
                     if current_playlist == None:
                         raise Exception(" ERR: Playlist not open.")
-                    for i in range(len(current_playlist.get_songs())):
+                    for i in range(len(current_playlist.oggpaths)):
                         if i == current_playlist.get_current_song_index():
-                            print (" {GREEN}[%d] : %s{END}" %(i, current_playlist.get_song_title(i))).format(**color_format)
+                            print (" {GREEN}[%d] : %s{END}" %(i, current_playlist.get_song_title(index=i))).format(**color_format)
                         else:
-                            print (" {WHITE}[%d] : %s{END}" %(i, current_playlist.get_song_title(i))).format(**color_format)
-                except Exception as inst:
-                    print ("{RED}%s{END}" %inst.message).format(**color_format)
+                            print (" {WHITE}[%d] : %s{END}" %(i, current_playlist.get_song_title(index=i))).format(**color_format)
 
-        elif "current" in cmd:
-            if "help" in cmd:
-                print " current"
-                print " Prints the index and the name of the song currently playing."
-            else:
-                try:
+            elif "current" in cmd:
+                if "help" in cmd:
+                    print " current"
+                    print " Prints the index and the name of the song currently playing."
+                else:
                     if current_playlist == None:
                         raise Exception(" ERR: Playlist not open.")
 
                     title = current_playlist.get_song_title()
 
                     if title is None:
-                        raise Exception( " ERR: No song playling.")
+                        raise Exception( " ERR: No song playing.")
                     else:
                         print (" {GREEN}[%d] : %s{END}" %(current_playlist.get_current_song_index(), title)).format(**color_format)
-                except Exception as inst:
-                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
-        elif "new" in cmd:
-            if "help" in cmd:
-                print " new <path <?>>"
-                print " Creates a new directory specified in path."
-            else:
-                if len(cmd) > 3:
-                    new_playlist(cmd[4:])
+            elif "new" in cmd:
+                if "help" in cmd:
+                    print " new <path <?>>"
+                    print " Creates a new directory specified in path."
                 else:
-                    new_playlist()
+                    if len(cmd) > 3:
+                        new_playlist(cmd[4:])
+                    else:
+                        new_playlist()
 
-        elif "play" in cmd:
-            if "help" in cmd:
-                print " play <index>"
-                print " Plays the loaded playlist at the desired index (0 if none given) (must have a playlist loaded to work)."
-            else:
-                try:
+            elif "delete" in cmd:
+                if "help" in cmd:
+                    print " delete <index>"
+                    print " Deletes the song at the desired index (must have a playlist loaded to work)."
+                else:
+                    if current_playlist is None:
+                        raise Exception(" ERR: Playlist not loaded.")
+                    if len(cmd) > 6:
+                        current_playlist.delete_song(int(cmd[7:]))
+                    else:
+                        current_playlist.delete_song()
+
+            elif "play" in cmd:
+                if "help" in cmd:
+                    print " play <index>"
+                    print " Plays the loaded playlist at the desired index (0 if none given) (must have a playlist loaded to work)."
+                else:
                     if current_playlist == None:
                         raise Exception(" ERR: Playlist not open.")
                     if len(cmd) > 4:
-                        try:
-                            current_playlist.set_index(int(cmd[5:]))
-                        except:
-                            print " ERR: Invalid index."
+                         current_playlist.index = int(cmd[5:])
                     else:
-                        current_playlist.set_index(0)
+                        current_playlist.index = 0
 
                     if pygame.mixer.music.get_busy():
                         pygame.mixer.music.stop()
                     thread.start_new_thread(run_player, ('Thread-1',
                                                          current_playlist, ))
-                except Exception as inst:
-                    print ("{RED}%s{END}" %inst.message).format(**color_format)
-
-        elif "shuffle" in cmd:
-            if "help" in cmd:
-                print " shuffle"
-                print " Toggle the shuffle feature (play random songs after each other) (must have a playlist loaded to work)."
-            else:
-                try:
+            elif "search" in cmd:
+                if "help" in cmd:
+                    pass
+                else:
                     if current_playlist == None:
                         raise Exception(" ERR: Playlist not open.")
-                    current_playlist.set_shuffle(not current_playlist.get_shuffle())
-                    print " *** Shuffle : %s ***" %current_playlist.get_shuffle()
-                except Exception as inst:
-                    print ("{RED}%s{END}" %inst.message).format(**color_format)
+                    if len(cmd) > 6:
+                        songs = current_playlist.search_for_song(cmd[7:])
+                    else:
+                        songs = current_playlist.search_for_song()
 
-        elif "skip" in cmd:
-            if "help" in cmd:
-                print " skip"
-                print " Skips the current song in the playlist (must have a playlist loaded to work)."
-            else:
-                try:
+                    if len(songs) == 0:
+                        raise Exception(" ERR: Song(s) not found.")
+                    for i in range(len(songs)):
+                        if songs[i] == current_playlist.get_current_song_index():
+                            print("{GREEN}[%d] : %s{END}" %(songs[i], current_playlist.get_song_title(songs[i]))).format(**color_format)
+                        else:
+                            print("{WHITE}[%d] : %s{END}" %(songs[i], current_playlist.get_song_title(songs[i]))).format(**color_format)
+
+            elif "shuffle" in cmd:
+                if "help" in cmd:
+                    print " shuffle"
+                    print " Toggle the shuffle feature (play random songs after each other) (must have a playlist loaded to work)."
+                else:
+                    if current_playlist == None:
+                        raise Exception(" ERR: Playlist not open.")
+                    current_playlist.shuffle = not current_playlist.shuffle
+                    print " *** Shuffle : %s ***" %current_playlist.shuffle
+
+            elif "skip" in cmd:
+                if "help" in cmd:
+                    print " skip"
+                    print " Skips the current song in the playlist (must have a playlist loaded to work)."
+                else:
                     if current_playlist == None:
                         raise Exception(" ERR: Playlist not open.")
                     #playlist automatically increments index after playing a song
                     current_playlist.skip_song()
-                except Exception as inst:
-                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
-        elif "previous" in cmd:
-            if "help" in cmd:
-                print " previous"
-                print " Plays the previous song in the playlist (must have a playlist loaded to work)."
-            else:
-                try:
+            elif "previous" in cmd:
+                if "help" in cmd:
+                    print " previous"
+                    print " Plays the previous song in the playlist (must have a playlist loaded to work)."
+                else:
                     if current_playlist == None:
                         raise Exception(" ERR: Playlist not open.")
                     current_playlist.previous_song()
-                except Exception as inst:
-                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
-        elif "restart" in cmd:
-            if "help" in cmd:
-                print " restart"
-                print " Restarts the current song in the playlist (must have a playlist loaded to work)."
-            else:
-                try:
+            elif "restart" in cmd:
+                if "help" in cmd:
+                    print " restart"
+                    print " Restarts the current song in the playlist (must have a playlist loaded to work)."
+                else:
                     if current_playlist == None:
                         raise Exception(" ERR: Playlist not open.")
                     current_playlist.restart_song()
-                except Exception as inst:
-                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
-        elif "pause" in cmd:
-            if "help" in cmd:
-                print " pause"
-                print " Pauses the music player."
-            else:
-                pygame.mixer.music.pause()
+            elif "pause" in cmd:
+                if "help" in cmd:
+                    print " pause"
+                    print " Pauses the music player."
+                else:
+                    pygame.mixer.music.pause()
 
-        elif "unpause" in cmd:
-            if "help" in cmd:
-                print " unpause"
-                print " Unpauses the music player."
-            else:
-                pygame.mixer.music.unpause()
+            elif "unpause" in cmd:
+                if "help" in cmd:
+                    print " unpause"
+                    print " Unpauses the music player."
+                else:
+                    pygame.mixer.music.unpause()
 
-        elif "volume" in cmd:
-            if "help" in cmd:
-                print " volume <new volume [0.0, 1.0]>"
-                print " Sets the volume to a desired float value (must be between 0.0 and 1.0 inclusive)."
-            else:
-                try:
+            elif "volume" in cmd:
+                if "help" in cmd:
+                    print " volume <new volume [0.0, 1.0]>"
+                    print " Sets the volume to a desired float value (must be between 0.0 and 1.0 inclusive)."
+                else:
                     new_volume = float(cmd[6:])
                     if new_volume < 0 or new_volume > 1:
                         raise Exception(" ERR: Volume out of bounds [0, 1.0].")
                     pygame.mixer.music.set_volume()
-                except Exception as inst:
-                    print ("{RED}%s{END}" %inst.message).format(**color_format)
 
-        elif "download" in cmd:
-            if "help" in cmd:
-                print " download <OPTIONAL youtube url>"
-                print " Searches for (no url provided) and downloads audio from a desired youtube video and converts it from AAC to OGG."
-                print " Places the audio file in a directory of the user's choice."
-                print " Possible thanks to pafy (yt download) and ffmpeg (convert aac to ogg)."
-            else:
-                if len(cmd) > 8:
-                    download_path = download_from_url(cmd[9:])
+            elif "download" in cmd:
+                if "help" in cmd:
+                    print " download <OPTIONAL youtube url>"
+                    print " Searches for (no url provided) and downloads audio from a desired youtube video and converts it from AAC to OGG."
+                    print " Places the audio file in a directory of the user's choice."
+                    print " Possible thanks to pafy (yt download) and ffmpeg (convert aac to ogg)."
                 else:
-                    download_path = download_from_url(search_youtube())
+                    if len(cmd) > 8:
+                        download_path = download_from_url(cmd[9:])
+                    else:
+                        download_path = download_from_url(search_youtube())
 
-        elif "clear" in cmd:
-            if "help" in cmd:
-                print " clear"
-                print " Clears/resets the command window."
+            elif "clear" in cmd:
+                if "help" in cmd:
+                    print " clear"
+                    print " Clears/resets the command window."
+                else:
+                    os.system('cls')
+                    print_banner()
+
+            elif "version" in cmd:
+                if "help" in cmd:
+                    print " version"
+                    print " Prints the current version of PyPlayer."
+                else:
+                    print " PyPlayer v:1.0 by Brendan McCloskey (mccloskeydev)"
+
+            elif "exit" in cmd:
+                if "help" in cmd:
+                    print " exit"
+                    print " Exits the player."
+                else:
+                    thread.exit()
+                    sys.exit(0)
+
             else:
-                os.system('cls')
-                print_banner()
+                if "help" not in cmd:
+                    print " ERR: Command not recognized."
 
-        elif "version" in cmd:
-            if "help" in cmd:
-                print " version"
-                print " Prints the current version of PyPlayer."
-            else:
-                print " PyPlayer v:1.0 by Brendan McCloskey (mccloskeydev)"
+                print " *** HELP ***"
+                print " COMMANDS: type <command> help to see help with specific functions"
+                print " open <path>, new <path>, play <index>, list, current, search <keyword>"
+                print " download <url>, shuffle, skip, previous, restart, pause, unpause, volume <new volume [0.0, 1.0]>"
+                print " help, clear, version, exit"
 
-        elif "exit" in cmd:
-            if "help" in cmd:
-                print " exit"
-                print " Exits the player."
-            else:
-                thread.exit()
-                sys.exit(0)
+        except Exception as inst:
+            print ("{RED}%s{END}" %inst.message).format(**color_format)
 
-        else:
-            if "help" not in cmd:
-                print " ERR: Command not recognized."
 
-            print " *** HELP ***"
-            print " COMMANDS: type <command> help to see help with specific functions"
-            print " open <path>, new <path>, play <index>, list, current"
-            print " download <url>, shuffle, skip, previous, restart, pause, unpause, volume <new volume [0.0, 1.0]>"
-            print " help, clear, version, exit"
+if __name__ == '__main__':
+    main()
 
